@@ -1,0 +1,62 @@
+#example /etc/ipfw.rules
+#$pif is replaced with internet interface
+#add following three lines to /etc/rc.conf
+#firewall_enable="YES"
+#firewall_type="/etc/ipfw.rules"
+#firewall_quiet="YES"
+-f flush
+
+#loopback
+add 10 allow all from any to any via lo0
+add 11 deny all from any to 127.0.0.0/8
+add 12 deny all from 127.0.0.0/8 to any
+add 13 deny tcp from any to any frag
+# statefull
+add 15 check-state
+add 16 allow tcp from any to any established
+add 17 allow all from any to any out keep-state
+add 18 allow icmp from any to any
+
+# Allow access to public DNS
+# Replace x.x.x.x with the IP address of a public DNS server
+# and repeat for each DNS server in /etc/resolv.conf
+add 00110 allow tcp from any to x.x.x.x 53 out via $pif setup keep-state
+add 00111 allow udp from any to x.x.x.x 53 out via $pif keep-state
+
+# Allow outbound HTTP and HTTPS connections
+add 00200 allow tcp from any to any 80 out via $pif setup keep-state
+add 00220 allow tcp from any to any 443 out via $pif setup keep-state
+
+# Allow outbound email connections
+#add 00230 allow tcp from any to any 25 out via $pif setup keep-state
+#add 00231 allow tcp from any to any 110 out via $pif setup keep-state
+
+# Allow outbound SSH
+add 00280 allow tcp from any to any 22 out via $pif setup keep-state
+
+# deny and log all other outbound connections
+add 00299 deny log all from any to any out via $pif
+
+#Examples of inbound
+# Deny all inbound traffic from non-routable reserved address spaces
+add 00300 deny all from 192.168.0.0/16 to any in via $pif     #RFC 1918 private IP
+add 00301 deny all from 172.16.0.0/12 to any in via $pif      #RFC 1918 private IP
+add 00302 deny all from 10.0.0.0/8 to any in via $pif         #RFC 1918 private IP
+add 00303 deny all from 127.0.0.0/8 to any in via $pif        #loopback
+add 00304 deny all from 0.0.0.0/8 to any in via $pif          #loopback
+add 00305 deny all from 169.254.0.0/16 to any in via $pif     #DHCP auto-config
+add 00306 deny all from 192.0.2.0/24 to any in via $pif       #reserved for docs
+add 00307 deny all from 204.152.64.0/23 to any in via $pif    #Sun cluster interconnect
+add 00308 deny all from 224.0.0.0/3 to any in via $pif        #Class D & E multicast
+
+# Allow HTTP connections to internal web server
+add 00400 allow tcp from any to me 80 in via $pif setup limit src-addr 2
+
+# Allow inbound SSH connections
+add 00410 allow tcp from any to me 22 in via $pif setup limit src-addr 2
+
+# Reject and log all other incoming connections
+add 00499 deny log all from any to any in via $pif
+
+# Everything else is denied and logged
+add 00999 deny log all from any to any
