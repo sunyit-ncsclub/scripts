@@ -1,0 +1,4 @@
+net user Administrator  new_password
+
+Run bulk password changer
+

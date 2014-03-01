@@ -1,0 +1,3 @@
+
+gci c:\Windows\Temp -include .vbs -Recurse -Force | Remove-Item -Recurse -Force
+gci c:\Windows\Temp -include .vbx -Recurse -Force | Remove-Item -Recurse -Force
