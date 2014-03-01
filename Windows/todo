@@ -2,3 +2,12 @@ net user Administrator  new_password
 
 Run bulk password changer
 
+Firewall
+
+SP1 32 http://www.microsoft.com/en-us/download/confirmation.aspx?id=11435
+SP2 32 http://www.microsoft.com/en-us/download/confirmation.aspx?id=41
+Window Managent Framework 32 http://www.microsoft.com/downloads/details.aspx?FamilyId=f002462b-c8f2-417a-92a3-287f5f81407e
+WMF 64 http://www.microsoft.com/downloads/details.aspx?FamilyId=909bbcf1-bd78-4e03-8c83-69434717e551
+
+
+ 
