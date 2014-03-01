@@ -1,0 +1,24 @@
+find programs with a set uid bit
+# find / -uid 0 -perm -4000
+find things that are world writable
+# find / -perm -o=w
+find names with dots and spaces, there shouldn't be any
+# find / -name " " -print
+# find / -name ".." -print
+# find / -name ". " -print
+# find / -name " " -print
+find files that are not owned by anyone
+# find / -nouser
+look for files that are unlinked
+# lsof +L1
+get information about procceses with open ports
+# lsof -i
+look for weird things in arp
+# arp -a
+look at all accounts including AD
+# getent passwd
+look at all groups and membership including AD
+# getent group
+list crontabs for all users including AD
+# for user in $(getent passwd|cut -f1 -d:); do echo "### Crontabs for $user
+####"; crontab -u $user -l; done

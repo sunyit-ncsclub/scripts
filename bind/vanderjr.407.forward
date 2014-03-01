@@ -1,0 +1,32 @@
+$TTL 1h
+@ IN  SOA ns1.vanderjr.407. hostmaster.vanderjr.407. ( 
+ 00012  ; serial
+ 4h    ; refresh
+ 1h    ; retry
+ 7d    ; expire
+ 1h    ; minimum
+)
+
+	IN NS ns1.vanderjr.407.
+	IN NS 107out.gw.cs.sunyit.edu.
+
+@		IN	MX 10 	mail
+
+ns1		IN	A	10.107.2.130
+ns1		IN	MX 10	mail
+www		IN 	A	10.107.2.128
+www		IN	MX 10	mail
+monitor		IN	A	10.107.2.129
+files		IN	A	10.107.2.131
+files		IN	MX 10	mail
+mail		IN	A	10.107.2.132
+test		IN	A	10.107.2.133
+test		IN	MX 10	mail
+shop		IN 	A	10.107.2.135
+shop		IN	MX 10	mail
+directory	IN	CNAME	ns1
+auth		IN	CNAME	ns1
+log		IN	CNAME	ns1
+blackhole	IN	CNAME 	monitor
+
+x._domainkey   TXT v=DKIM1; t=y; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC3ZXdKn/FafApU3wdXuU5h6yYcq64WULSRtcKR8ubVnP9z62lxu4iDNiDRAfqMnzbX77DQmVitzdCunyWjlPNnNm4+M8TlX3oeDiVU5e2bb9MbUxD68aiq5cCZPx2M4BUsLESdn2rGMC+n5zk+qq5xZtkL8H1PUkvQllToPcsW+QIDAQAB

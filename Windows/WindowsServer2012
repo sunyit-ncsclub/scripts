@@ -1,0 +1,29 @@
+Boot MS Server DVD
+Select Repair your computer
+Choose option "Troubleshoot"
+Advanced Options > Command Prompt
+
+   d:
+   cd windows\system32
+   ren Utilman.exe Utilman.exe.old
+   copy cmd.exe Utilman.exe
+
+Close Command prompt > Continue
+
+on boot/logon screen hit WindowsKey+U
+
+now set the password via
+   net user administrator <password>
+
+
+to clean up do the reverse
+  ren Utilman.exe Utilman.exe.new
+  cp Utilman.exe.old Utilman.exe
+
+
+http://technet.microsoft.com/en-us/library/cc748993.aspx#BKMK_cmd
+
+http://www.microsoft.com/en-us/download/details.aspx?id=39273
+
+Dashboard > Tools > Security Configuration Wizard > 
+
