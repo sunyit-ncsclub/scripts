@@ -22,3 +22,8 @@ look at all groups and membership including AD
 list crontabs for all users including AD
 # for user in $(getent passwd|cut -f1 -d:); do echo "### Crontabs for $user
 ####"; crontab -u $user -l; done
+#generate random passwords
+cat /dev/urandom| tr -dc 'a-zA-Z0-9-_!@#$%^&*()_+{}|:<>?='|fold -w 12| head -n
+4
+#SNEAKY - replace /dev/random with /dev/zero, IT'S USED TO BREAK THINGS
+mknod /dev/unrandom c 1 5
