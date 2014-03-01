@@ -12,3 +12,25 @@ freebsd-update fetch
 freebsd-update install
 #if anything goes wroung
 freebsd-update rollback
+
+#kernel security
+kern_securelevel_enable="YES"
+kern_securelevel="1"
+
+#hardining a BSD box
+#put tmp in all one directory, easier to follow
+mv /var/tmp/* /tmp/
+rm -rf /var/tmp
+ln -s /tmp /var/tmp
+#stop users besides root from being able to cron
+echo "root" > /var/cron/allow
+echo "root" > /var/at/at.allow
+chmod o= /etc/crontab
+chmod o= /usr/bin/crontab
+chmod o= /usr/bin/at
+chmod o= /usr/bin/atq
+chmod o= /usr/bin/atrm
+chmod o= /usr/bin/batch
+#blackhole port scans
+echo "net.inet.tcp.blackhole=2" >> /etc/sysctl.conf
+echo "net.inet.udp.blackhole=1" >> /etc/sysctl.conf
