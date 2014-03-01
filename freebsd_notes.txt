@@ -1,0 +1,14 @@
+#Incase ports is missing
+#pgk_add way
+pkg_add -r portsnap
+mkdir /usr/ports
+portsnap fetch
+portsnap extract
+#update it if we already have it
+portsnap update
+
+#update if 9 or 10
+freebsd-update fetch
+freebsd-update install
+#if anything goes wroung
+freebsd-update rollback

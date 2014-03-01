@@ -1,0 +1,33 @@
+------SQL commands-------
+mysql -u root -p
+-to login
+show databases;
+-show databases
+select database database_name;
+-selects the database with database_name
+show tables;
+-shows all tables in current databse
+
+Basics
+CREATE database_name;
+-creates the databse database_name
+SELECT * FROM table WHERE colum=value;
+- Selects everything from table name table thats colum = value 
+UPDATE table_name SET column1=value1 WHERE some_column=some_value;
+- basic update
+DELETE FROM table_name WHERE some_column=some_value;
+- deltes lines where some_colum=some_value on talbe table_name
+INSERT INTO table_name (column1) VALUES (value1);
+- inserts new record into table_name, colum1 is set to value1
+
+Authentication Stuff
+CREATE USER 'monty'@'localhost' IDENTIFIED BY 'some_pass';
+-creates a user monty that can only login on localhost with some_pass
+GRANT ALL PRIVILEGES ON montydb.* TO 'monty'@'localhost'
+    ->     WITH GRANT OPTION;
+- allows the monty users to have all rights on montydb
+SHOW GRANTS FOR 'admin'@'localhost';
+- shows all info about the user 'admin'@'localhost'
+**NOTE all this can be done directly just make sure you run the following when done
+FLUSH PRIVILEGES;
+

@@ -1,0 +1,20 @@
+$TTL 1h
+@ IN  SOA ns1.vanderjr.407. hostmaster.vanderjr.407. (
+ 00012  ; serial
+ 4h    ; refresh
+ 1h    ; retry
+ 7d    ; expire
+ 1h    ; minimum
+)
+
+        IN NS ns1.vanderjr.407.
+        IN NS 107out.gw.cs.sunyit.edu.
+
+
+130 IN  PTR  ns1.vanderjr.407.
+128 IN  PTR  www.vanderjr.407.
+129 IN  PTR  monitor.vanderjr.407.
+131 IN 	PTR  files.vanderjr.407.
+132 IN	PTR  mail.vanderjr.407.
+133 IN  PTR  test.vanderjr.407.
+135 IN  PTR  shop.vanderjr.407.
