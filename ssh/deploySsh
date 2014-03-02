@@ -1,0 +1,14 @@
+#!/bin/sh
+WHO=$1
+
+mv $PWD/$1.ssh/* /root/.ssh/
+
+mv $PWD/sshd_config /etc/ssh/sshd_config
+
+/etc/init.d/ssh restart
+
+echo  "IdentityFile /root/.ssh/"$1.rsa > /root/.ssh/config
+echo  "IdentityFile /root/.ssh/"$1.rsa >> /root/.ssh/config
+echo  "IdentityFile /root/.ssh/"$1.rsa >> /root/.ssh/config
+echo  "IdentityFile /root/.ssh/"$1.rsa >> /root/.ssh/config
+
