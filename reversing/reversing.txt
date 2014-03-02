@@ -1,0 +1,8 @@
+Easy:
+welcome
+hello
+
+Medium:
+calculator.exe
+explorer.exe
+BROKEN
