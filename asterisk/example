@@ -1,0 +1,8 @@
+#orginate from asterisk cli
+originate Zap/1/123456 extension 400@greeting
+#originate from bash
+asterisk -rx "originate zap/1/123456 extension 1@greeting
+#syntex on new asterisk
+channel originate <tech/data> extension [<exten>@][<context>
+#to dial from a console
+dial <extention>
