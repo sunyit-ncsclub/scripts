@@ -1,0 +1,40 @@
+General Linux
+30 min
+[ ] - change all passwords
+[ ] - Patch critical services
+[ ] - check password file for users who shouldn't have shells
+[ ] - check for users with out passwords in shadow
+[ ] - check groups
+[ ] - If sudo is inalled make sure only users that will need to use it are enabled
+[ ] - .bashrc and /etc/bashrc make sure there is no . in your path, also make sure no weird scripts are running on login
+[ ] - crontab we don't want radom stuff starting
+[ ] - make sure syslog is running
+[ ] - look at netstat  and ps, determin if something is there that shouldn't 
+[ ] - disable root login on ssh
+[ ] - Get iptables up and runninig
+[ ] - enable wheel required to su in /etc/pam.d/su by uncomenting the followig
+	auth           required        pam_wheel.so use_uid
+	****NOTE***** make sure you add your users to the wheel group first otherwise you
+	will be locked out
+extended
+[ ] - install X, run securely
+[ ] - look into updating services outside of package manager. ex wordpress
+[ ] - Continuing monitoring of the system for attackers
+[ ] - Centarl loging
+[ ] - Intsall fossil and start keeping track of changes?
+[ ] - Tye normal user accounts into AD?
+
+Web
+[ ] - run the following to secure the database
+	/usr/bin/mysql_secure_installation
+[ ] - Make sure web users are not loging in as root
+[ ] - seperate things out into databases if possible
+[ ] - Pci compliance and SSL
+
+Dns
+[ ] - make sure it is configed to stop zone transfers
+
+Mail
+[ ] - check for open relay
+[ ] - Set up spam filtering?
+[ ] - How are users authenticating?
