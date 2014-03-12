@@ -1,0 +1,5 @@
+#!/bin/sh -- # -*- sh -*-
+
+# The Cray doesn't support diskless clients.
+
+exit 0

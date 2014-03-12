@@ -1,0 +1,295 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# check_known - 06/14/93
+# 05/20/2006 jfs Use TAIL properly (POSIX 1003.2-1992)
+# 06/15/2004 jfs Do not call LS directly with all files but use a for loop
+#                (Debian bug #246600)
+# 01/15/2004 jfs Do not run the inetd code if inetd_sets is emtpy!
+# 11/19/2003 jfs Linux: accurate, per interface, promiscuous mode detection
+#                Contributed by unspawn with some changes to make it POSIX
+#                correct.
+# 10/01/2003 jfs Do not delete passwd files if the Tiger_PasswdFiles is
+#                defined, otherwise checks relying on it will break
+# 09/19/2003 jfs Fixed deletion of temporary files thanks to a patch
+#                provided by Nicolas François 
+# 08/14/2003 jfs Added OUTPUTMETHOD to dependancies. Incorporated tests
+#                implemented by ARSC (quite a time ago....)
+# 08/08/2003 jfs Safe temporary file creation
+# 05/01/2003 jfs Removed RM and CC from dependancies
+# 04/15/2003 jfs Removed the 'cd' to MAILSPOOL since the CAT of the passlist
+#		 will not work if BASEDIR is relative. Fixed the AWK call
+#		 (was being made to the wrong file!)
+# 07/25/2002 jfs Added a sanity check for password files
+# 18/05/2002 jfs Changed cat to $CAT in some calls
+# 28/03/2002 jfs Applied some of the changes described by CHANGES.ARSC from 
+#              mlk.
+# 09/14/2001 ret Added test for promiscous mode in ifconfig
+# 09/24/2001 ret Added test for shell (e.g. bin/sh) in inetd.conf
+# 14/09/2001 jfs Changed to ls -lan so it can check user's id (otherwise it
+#              does not work for long user names) affects only SPOOL check
+# 06/06/1993 dls Moved 1's complement check to SunOS 4.x specific
+# 04/27/1993 dls "1's complement" check of /bin/login added
+#
+#-----------------------------------------------------------------------------
+# TODO
+# - Many exploits run code that make inetd source a different configuration
+#   file through the use of the '-s' flag (available in SunOS and OpenBSD)
+#   or by directly specifying a configuration file (works in FreeBSD and Linux)
+#-----------------------------------------------------------------------------
+#
+TigerInstallDir='.'
+
+#
+# Set default base directory.
+# Order or preference:
+#      -B option
+#      TIGERHOMEDIR environment variable
+#      TigerInstallDir installed location
+#
+basedir=${TIGERHOMEDIR:=$TigerInstallDir}
+
+for parm
+do
+   case $parm in
+   -B) basedir=$2; break;;
+   esac
+done
+
+#
+# Verify that a config file exists there, and if it does
+# source it.
+#
+[ ! -r $basedir/config ] && {
+  echo "--ERROR-- [init002e] No 'config' file in \`$basedir'."
+  exit 1
+}
+
+. $basedir/config
+
+. $BASEDIR/initdefs
+
+#
+# If run in test mode (-t) this will verify that all required
+# elements are set.
+#
+[ "$Tiger_TESTMODE" = 'Y' ] && {
+  haveallcmds AWK CAT EGREP FIND GET_MOUNTS LS SED SGREP STRINGS TR TAIL HEAD CUT OUTPUTMETHOD RM GEN_INETD_SETS || exit 1
+  haveallfiles BASEDIR WORKDIR || exit 1
+  haveallvars TESTLINK HOSTNAME
+  
+  echo "--CONFIG-- [init003c] $0: Configuration ok..."
+  exit 0
+}
+
+#------------------------------------------------------------------------
+echo
+echo "# Checking for known intrusion signs..."
+
+haveallcmds AWK CAT EGREP FIND GET_MOUNTS LS SED SGREP STRINGS TR TAIL HEAD CUT OUTPUTMETHOD RM GEN_INETD_SETS || exit 1
+haveallfiles BASEDIR WORKDIR || exit 1
+
+safe_temp "$WORKDIR/login.str.$$" "$WORKDIR/pass.list.$$"
+trap 'delete $WORKDIR/login.str.$$ $WORKDIR/pass.list.$$ ; exit 1' 1 2 3 15
+
+{
+  haveallcmds IFCONFIG && { 
+     # Note: This is Linux specific 
+     # (maybe should be moved to systems/Linux/2/check_known)
+     [ ! -x "$IP" -o "$OS" != "Linux" ] && message INFO kisXXX "" "Using $IFCONFIG instead of $IP, promiscuous mode detection incomplete. Installing $IP adds libpcap/libnet-based sniffer detection capabilities."
+
+     VER=`echo $REV | $CUT -f 2 -d .`
+     if [ -x "$IP" -a $VER -ge 4 ] 
+     then
+         echo "# Testing for promiscuous interfaces with $IP"
+         $IP link show |
+	 $EGREP '^[0-9].*PROMISC' |
+	 # Alternative:
+         # $IP link show|
+	 # $AWK '/^[0-9].*UP/{printf "Device \t%s promisc. \t%s\n", $2, $3}'
+         while read number intf flags other
+         do
+            message ALERT kis013a "" "Interface $intf set for promiscuous mode"
+         done
+     else
+         echo "# Testing for promiscuous interfaces with $IFCONFIG"
+         promisc="`$IFCONFIG -a | $GREP -i PROMISC`"
+         [ -n "$promisc" ] && message ALERT kis013a "" "One of the interfaces is set for promiscuous mode"
+     fi
+  }
+  
+  echo "# Testing for backdoors in inetd.conf"
+  inetd_sets=`$GEN_INETD_SETS`
+  if [ -n "$inetd_sets" ] 
+  then
+  # TODO inetd_sets should be appended with any non-option which 
+  # has been fed to the current running inetd (use PS to locate it)
+  shcase='/bin/sh|/bin/csh|/bin/bash|/bin/tcsh|/bin/ksh'
+  [ -n "$ETCSHELLS" -a -s "$ETCSHELLS" ] && {
+    shells=`$GREP -v '^#' $ETCSHELLS`
+    shcase=`echo $shells | $TR ' ' '|'`
+  }
+  backdoor="`$EGREP $shcase $inetd_sets`"
+  if [ -n "$backdoor" ]; then
+     message ALERT kis014a "" "There is a shell defined in inetd.conf, the backdoor line is: '$backdoor'"
+  fi
+  delete $inetd_sets $inetd_sets.src
+  fi # Of if $inetd_sets
+
+  file_list="/usr/spool/uucppublic/.hushlogin /usr/spool/secretmail/.l /tmp/a
+/usr/spool/secretmail/.log /usr/spool/secretmail/.tty
+/usr/spool/secretmail/.lock /usr/tmp/.log /usr/spool/uucp/.sys
+/usr/uucp/.sys /var/crash/... /usr/etc/.getwd /var/crash/.getwd /usr/kvm/... /dev/.tty /dev/.test"
+
+  for file in $file_list
+  do
+    [ -s "$file" ] && {
+      if [ -d "$file" ]; then
+	message ALERT kis001a "" "$file is a directory."
+	$LS -AlR "$file"
+	echo
+      else 
+	message ALERT kis002a "" "$file is not zero-length."
+	$LS -l "$file"
+	echo
+      fi
+    }
+  done
+
+  haveallcmds EGREP FIND && {
+    for serverdir in /tmp/.X11-unix /tmp/.NeWS-unix
+    do
+      [ -d "$serverdir" ] && {
+	nonsocket=`$FIND $serverdir/ ! -type s -a ! -type p -print |
+	$EGREP -v '^'"$serverdir"'/$'`
+
+	[ -n "$nonsocket" ] && {
+	  message ALERT kis003a "" "$serverdir contains files other than window server sockets:"
+	  $LS -alR "$serverdir"
+  	  echo
+	}
+      }
+    done
+  }
+  
+  haveallcmds GET_MOUNTS AWK FIND SED TR && {
+    $GET_MOUNTS local |
+    $AWK '{
+      if($1 == "/")
+        print "/lost+found";
+      else
+        print $1 "/lost+found";
+    }' |
+    while read dir
+    do
+      [ -d "$dir" -a -r "$dir" ] && {
+	cd "$dir"
+	files=`$FIND . -print | $SED -e 's%^./%%' -e '/^.$/d' -e '/^..$/d'`
+	# On HP-UX change to:
+	#files=`$FIND . -print | $SED -e 's%^./%%' -e '/^.$/d' -e '/^..$/d' -e '/^[.]fsadm$/d'`
+	alertfiles=`echo "$files" |
+	            $TR ' ' '\012' |
+	            $SED -e 's%^#\{1\}[0-9][0-9.]*$%%g'
+	`
+	if [ -n "$alertfiles" ]; then
+	  message WARN kis004w "" "$dir contains possible non-fsck files:"
+	  # TODO: Consider not listing the files and just providing
+	  # the raw numbers if the number of non-fsck files is very high.
+	  for file in $alertfiles ; do
+	  	$LS -alR $file 
+	  done
+	  echo
+	elif [ -n "$files" ]; then
+	  message WARN kis004w "Files: $alertfiles" "$dir is not empty:"
+	fi
+      }
+    done
+  }
+
+  haveallcmds STRINGS SGREP && {
+    $STRINGS - /bin/login > $WORKDIR/login.str.$$
+    $SGREP 'back' $WORKDIR/login.str.$$ && {
+      message ALERT kis005a "" "/bin/login may contain backdoor login"
+    }
+    $SGREP 'BACK' $WORKDIR/login.str.$$ && {
+      message ALERT kis005a "" "/bin/login may contain backdoor login"
+    }
+    delete $WORKDIR/login.str.$$
+  }
+
+  [ -n "$TESTSUID" -a $TESTEXEC "$TESTSUID" ] && {
+    $TESTSUID ||
+    message ALERT kis007a "" "The setuid(2) system call is compromised."
+  }
+
+  haveallcmds GEN_PASSWD_SETS GREP CUT AWK LS TAIL HEAD &&
+  haveallfiles BASEDIR MAILSPOOL WORKDIR && (
+    echo
+    echo "# Performing check of files in system mail spool..."
+
+
+     if [ -n "$Tiger_PasswdFiles" ]; then
+      [ -f $Tiger_PasswdFiles ] && $CAT "$Tiger_PasswdFiles" > $WORKDIR/pass.list.$$
+     else
+      $GEN_PASSWD_SETS $WORKDIR/pass.list.$$
+     fi
+
+# Added -n for numeric uids, jfs
+    $LS -anl $MAILSPOOL/  |
+    $TAIL -n +2 |
+    $AWK '{print $3, $NF}' |
+    while read uid file
+    do
+    
+    # TODO: the current scheme does not work correctly  in all cases 
+    # if there is more that one user with the same UID 
+    # (the ^+ is there to prevent confusing
+    # NIS records) and the $HEAD -1 just takes the first one...
+    # (this errors are introduced due to the numeric checks instead of name
+    # checks.... oh well...)
+     owner=""
+     for passwd_set in `$CAT $WORKDIR/pass.list.$$`
+     do
+      [ -z "$owner" ] && 
+#	 owner=`$GREP :$uid: $passwd_set | $GREP -v "^+" | $CUT -f 1 -d : |$HEAD -1`
+	 owner=`$AWK -F: '$3 ~ /^'$uid'$/ { print $1 }' $passwd_set | $HEAD -1`
+     done 
+
+     # If the user is not found in the password file
+     if [ -n "$owner" ] ; then
+	     [ "$file" != '.' -a "$file" != '..' -a "$file" != ':saved' -a "$owner" != "$file" ] &&
+	     message WARN kis008w "" "File \"$file\" in the mail spool, owned by \"$owner\"."
+     else
+	     [ "$file" != '.' -a "$file" != '..' ] &&
+	     message WARN kis010w "" "File \"$file\" in the mail spool does not belong to a valid user (belongs to uid \"$uid\")."
+     fi
+
+    done # of the while read
+
+    if [ -f $WORKDIR/pass.list.$$ ] ; then
+    	if [ -z "$Tiger_PasswdFiles" ] ; then
+ 	     	for passwd_set in `$CAT $WORKDIR/pass.list.$$`; do
+      			delete $passwd_set $passwd_set.src 
+      		done
+	fi
+	delete $WORKDIR/pass.list.$$
+    fi
+  )
+} |
+$OUTPUTMETHOD
+#
+exit 0

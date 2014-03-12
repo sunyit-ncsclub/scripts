@@ -1,0 +1,351 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# check_passwd  - 06/14/93
+#
+# 07/27/2002 jfs Added a sanity check for password files
+# 08/09/2002 jfs Fixed some ! tests 
+# 10/28/2002 jfs Improved check with patch from Bob Hall
+# 05/01/2003 jfs Fixed PWCK behavior
+# 06/21/2003 jfs Modified with patch from Ryan Bradetich to generalise
+#                PWCK support and to add an additional check (emtpy password)
+#                Also added an acceptable cryptographic hash check, as well
+#                as a check for duplicate home directories.
+# 08/08/2003 jfs Improved temporary file creation.
+#		 Applied Ryan Braderitch's patch:
+#   * Reformat and optimize some checks (replace several awk statements with
+#    a single pass through the password file).
+#   * Changed the Administrative Login ID with impossible password to a failure
+#     instead of a warning.
+#   * Added the following checks from check_account:
+#    - Login ID is disabled, but still has a valid shell (acc001w)
+#    - Login does not have a valid shell (acc020w)
+#    - UID has / for home directory (acc014f)
+#    - Login ID is UID-0 (acc012w)
+#    - Administrative Login ID should have impossible password (acc018w)
+#   * Merged these duplicate checks from check_account:
+#    - empty password check (acc010a, acc011w)
+#    - duplicate home directory check (acc015w)
+# 10/07/2003 jfs Delete temporary files
+# 10/19/2003 jfs Patch from Nicolas François which uses EGREP instead of GREP
+#    in order to avoid Solaris problems.
+# 10/11/2003 jfs Patch from Ryan Braderitch's to fix a WARN -> FAIL
+# 01/18/2004 rbrad Applied Savannah patch:
+#	* 2466 - update list of shells to ignore.
+# 01/21/2004 jfs Moved comment from check_accounts to here and expanded
+#       shcase definition to be equivalent to the one there.
+# 03/03/2004 jfs Check if users do not have a shell defined
+# 05/03/2004 jfs Define Tiger_Passwd_Hashes if not defined (Debian bug #246885)
+# 12/27/2004 jfs Delete temporary passwd files only on exit (Debian bug #284899)
+# 03/31/2005 jfs Recognise old xxxxxxxxxxxxx as a valid password hash
+#                Add /bin/true as valid shell as well as Solaris shells
+# 05/20/2006 jfs Add quotation marks to Tiger_Admin_Accounts to prevent
+#                errors if empty (Debian bug #342181)
+#
+#-----------------------------------------------------------------------------
+# TODO:
+# - Some 'valid' shells such as nologin or noshell might be listed under
+#  /etc/shells but are really invalid. The script should maybe check these
+#  cases or provide a way to define $NOSHELL in order to exclude these.
+#  Notice that the list of valid shells is derived from /etc/shells (a sane
+#  default is also used) but the way the 'case' segment is structured 
+#  invalid shells listed are omitted.
+#
+#-----------------------------------------------------------------------------
+TigerInstallDir='.'
+
+#
+# Set default base directory.
+# Order or preference:
+#      -B option
+#      TIGERHOMEDIR environment variable
+#      TigerInstallDir installed location
+#
+basedir=${TIGERHOMEDIR:=$TigerInstallDir}
+
+for parm
+do
+   case $parm in
+   -B) basedir=$2; break;;
+   esac
+done
+
+#
+# Verify that a config file exists there, and if it does
+# source it.
+#
+[ ! -r $basedir/config ] && {
+  echo "--ERROR-- [init002e] No 'config' file in \`$basedir'."
+  exit 1
+}
+
+. $basedir/config
+
+. $BASEDIR/initdefs
+#
+# If run in test mode (-t) this will verify that all required
+# elements are set.
+#
+[ "$Tiger_TESTMODE" = 'Y' ] && {
+  haveallcmds AWK CAT GEN_PASSWD_SETS GREP EGREP JOIN SED SORT UNIQ RM || exit 1
+  haveallfiles BASEDIR WORKDIR || exit 1
+  
+  echo "--CONFIG-- [init003c] $0: Configuration ok..."
+  exit 0
+}
+
+#------------------------------------------------------------------------
+
+echo
+echo "# Performing check of passwd files..."
+
+haveallcmds AWK CAT GEN_PASSWD_SETS GREP EGREP JOIN SED SORT UNIQ RM || exit 1
+haveallfiles BASEDIR WORKDIR || exit 1
+
+safe_temp "$WORKDIR/pass.list.$$" "$WORKDIR/p1name.$$" "$WORKDIR/p2name.$$" "$WORKDIR/p1uid.$$" "$WORKDIR/p2uid.$$"
+
+trap 'delete "$WORKDIR/pass.list.$$" "$WORKDIR/p1name.$$" "$WORKDIR/p2name.$$" "$WORKDIR/p1uid.$$" "$WORKDIR/p2uid.$$" ; exit 1;' 1 2 3 15
+
+check_passwd_entries()
+{
+  saveifs=$IFS
+  IFS=:
+
+  while read login hash uid gid gcos home shell
+  do
+
+    # Check the password hash.
+    [ -z "$Tiger_Passwd_Hashes" ] && Tiger_Passwd_Hashes='crypt3|md5|xxxxxxxxxxxxx'
+    eval "case \"$hash\" in
+      \"\")
+        message FAIL pass011f \"\" \"Username \\\`$login' has an empty password field.\"
+        ;;
+      $Tiger_Passwd_Hashes|\*)
+        ;;
+      *)
+        message WARN pass013w \"\" \"Username \\\`$login' is not using an acceptable password hash ($hash).\"
+        ;;
+    esac"
+
+    # Report additional UID-0 accounts.
+    [ "$uid" = 0 -a "$login" != root ] && {
+      message WARN pass017w "" "Login ID $login has uid == 0."
+    }
+
+    # Perform administrative checks (Maybe this should be a function...)
+    eval "case \"$login\" in
+      \"$Tiger_Admin_Accounts\")
+         [ \"$hash\" != '*' ] && {
+           message FAIL pass018f \"\" \"Administrative user $login does not have an impossible password.\"
+         }
+         continue
+         ;;
+    esac"
+
+    # Report users with / as their homedir
+    [ "$home" = / ] && {
+      message WARN pass016w "" "User $login has $home as home directory"
+    }
+
+    # Mark as an emptyshell, if shell is not specified.
+    [ "x$shell" = "x" -o "x$shell" = "x " ] && shell=emptyshell
+
+    # Check for valid shells.
+    # TODO: The hardcoded list of shells could be user defined 
+    # (i.e. in tigerrc)
+    eval "case \"$shell\" in
+      /bin/false|/usr/bin/false|/dev/null|/sbin/nologin|/bin/true)
+         ;;
+      $shcase)
+         [ \"$hash\" = \* ] && {
+	   message WARN pass014w \"\" \"Login ($login) is disabled, but has a valid shell.\"
+         } 
+         ;;
+      emptyshell)
+         message WARN pass015w \"\" \"Login ID $login has an empty shell.\"
+         ;;
+      *)
+         message WARN pass015w \"\" \"Login ID $login does not have a valid shell ($shell).\"
+         ;;
+    esac"
+  done
+
+  IFS=$saveifs
+}
+
+#
+# This function checks for UID and username conflicts between multiple password sources.
+#
+conflict_check()
+{
+  passwd1=$1
+  passwd2=$2
+
+
+  $SORT $passwd2 > $WORKDIR/p2name.$$
+  $SORT -t: -k 3,3 $passwd2 > $WORKDIR/p2uid.$$
+  $JOIN -t: -o 1.1 1.3 2.3 $WORKDIR/p1name.$$ $WORKDIR/p2name.$$ |
+  {
+    IFS=:
+    while read username uid1 uid2
+    do
+      IFS=$saveifs
+      [ "$uid1" != "$uid2" ] && {
+        message WARN pass004w "" "UID conflict for login ID \`$username' between $src1 (uid = $uid1) and $src2 (uid = $uid2)."
+      }
+      IFS=:
+    done
+  }
+                                                                                                                                                                                                           
+  $JOIN -t: -j1 3 -j2 3 -o 1.3 1.1 2.1 $WORKDIR/p1uid.$$ $WORKDIR/p2uid.$$ |
+  $AWK -F: '$1 != 0 {print}' |
+  {
+    IFS=:
+    while read uid name1 name2
+    do
+      IFS=$saveifs
+      [ "$name1" != "$name2" ] && {
+        message WARN pass005w "" "Username conflict for uid $uid between $src1 (login ID $name1) and $src2 (login ID $name2)."
+      }
+      IFS=:
+    done
+  }
+  delete $WORKDIR/p2uid.$$ $WORKDIR/p2name.$$
+}
+
+# Define shcase to be a list of valid shells, so we can check for
+# shell initilization files.
+shcase='/bin/sh|/bin/csh|/bin/bash|/bin/tcsh|/bin/ksh'
+if [ "$OS" = "SunOS" ] ; then
+	shcase="$shcase|/sbin/sh|/usr/bin/bash"
+fi
+
+[ -n "$ETCSHELLS" -a -s "$ETCSHELLS" ] && {
+  shells=`$GREP -v '^#' $ETCSHELLS`
+  shcase=`echo $shells | $TR ' ' '|'`
+}
+
+if [ -n "$Tiger_PasswdFiles" ]; then
+  [ -f $Tiger_PasswdFiles ] && $CAT "$Tiger_PasswdFiles" > $WORKDIR/pass.list.$$
+else
+  $GEN_PASSWD_SETS $WORKDIR/pass.list.$$
+fi
+
+while read passwd_set
+do
+  source=`$CAT $passwd_set.src`
+  echo "# Checking entries from $source."
+
+  $CAT $passwd_set |
+  check_passwd_entries
+
+  $SORT $passwd_set > $WORKDIR/p1name.$$
+  $SORT -t: -k 3,3 $passwd_set > $WORKDIR/p1uid.$$
+
+  # Check for duplicate usernames.
+  $AWK -F: '{print $1}' $WORKDIR/p1name.$$ |
+  $SORT |
+  $UNIQ -c |
+  while read times username
+  do
+    # Previous fix for Debian bug #117117, ARSC's fix is much better (jfs)
+    #    times=`$GREP "$username:" $WORKDIR/p1name.$$ | $AWK 'END { print NR }'`
+    [ $times -gt 1 ] && {
+      message WARN pass001w "" "Username \`$username' exists multiple times ($times) in $source."
+    }
+  done
+
+  # Check for multiple non-NIS entries with the same UID
+  $AWK -F:  '/^[^+-]/ {print $3}' $WORKDIR/p1uid.$$ |
+  $SORT |
+  $UNIQ -c |
+  while read times uid
+  do
+# Previous fix for Debian bug #117117, ARSC's fix is much better 
+#    times=`$GREP ":$uid:" $WORKDIR/p1uid.$$ | $AWK 'END { print NR }'`
+    [ $times -gt 1 ] && \
+      message WARN pass002w "" "UID $uid exists multiple times ($times) in $source."
+  done
+
+  # Check for multiple entries with duplicate home directories.
+  $EGREP -v "^($Tiger_Admin_Accounts):" $WORKDIR/p1uid.$$ |
+  $AWK -F: '{print $6}' |
+  $SORT |
+  $UNIQ -c |
+  while read times homedir
+  do
+    [ $times -gt 1 ] && {
+      message WARN pass012w "" "Home directory $homedir exists multiple times ($times) in $source."
+    }
+  done
+
+done < $WORKDIR/pass.list.$$
+
+# Check for conflicts.
+while read src1
+do
+  while read src2
+  do
+    conflict_check $src1 $src2
+  done 
+done < $WORKDIR/pass.list.$$
+
+# See if the system is configured for shadow passwords.
+[ "$Tiger_Check_PASSWD_SHADOW" != 'N' ] && {
+  [ -s /etc/passwd ] && [ -s /etc/shadow ] || {
+    message WARN pass007w "" "System is not properly configured for shadow passwords."
+  }
+}
+
+# Verify the password file format.
+[ -n "$PWCK" ] && {
+  # TODO: Add the results to the report
+  pwckerr=`$PWCK 2>&1`
+  if [ -n "$pwckerr" ] ; then
+    message WARN pass006w "" "Integrity of password files questionable ($PWCK)."
+  fi
+}
+
+# Check the password constraints.
+[ -r "$LOGINDEF" ] && [ -z "$PAMLOGINDEF" -o ! -f "$PAMLOGINDEF" ] && \
+[ -n "$Tiger_Passwd_Constraints" ]  && {
+  for param in $Tiger_Passwd_Constraints
+    do
+    if [ ! `$GREP -v '#' $LOGINDEF | $GREP "$param"` ] >/dev/null 2>&1
+      then
+        message WARN pass007w "" "Password control $param missing from $LOGINDEF."
+    fi
+  done
+}
+
+# TODO: For Pam systemms the PAMLOGINDEF file needs to be checked instead
+# of login.defs
+#[ -f "$PAMLOGINDEF" ] && [ -n "$Tiger_Pam_Constraints" ]  && {
+#}
+                                                                                                                                                                                                           
+# Cleanup the temporary files.
+[ ! -n "$Tiger_PasswdFiles" ] && {
+  while read file
+  do
+    delete $file $file.src
+  done < $WORKDIR/pass.list.$$
+}
+delete "$WORKDIR/pass.list.$$" "$WORKDIR/p1name.$$" "$WORKDIR/p2name.$$" 
+delete "$WORKDIR/p1uid.$$" "$WORKDIR/p2uid.$$"
+
+exit 0
+

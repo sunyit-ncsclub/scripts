@@ -1,0 +1,379 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# check_accounts - created 06/14/93
+#
+# Checks the accounts provided in the system, looking for disabled accounts
+# with cron, rhosts, and .forward files as well as proper configuration
+# (home directory accesibility, shell configuration files, dormant accounts
+# and .hushlogin files)
+#
+# 10/11/2006 jfs  Redirect find errors in $HOME to null (Debian bug #386163)
+# 20/04/2006 jfs  Fix the pipe check in forward files (Debian bug #329610)
+# 15/06/2005 jfs  Check for null $uids before using them in comparisons
+#                 (Debian bug #312080)
+# 17/11/2004 jfs  Fixed eval in check_accounts so that find is _only_ 
+#                 executed for users which are not part of
+#                 Tiger_Admin_Accounts, this prevents Tiger from accesing
+#                 filesystems when not needed  (Debian bug #280653)
+#                 It also should speed this check by removing unnecesary
+#                 filesystem checks.
+# 05/02/2004 jfs  Try to avoid eval problems if user/shells/directories contain
+#                 non-empty (but invalid) characters (such as space) 
+#                 (Debian bug #246987)
+# 01/21/2004 jfs  Removed TODO (no longer applies here), expanded description and
+#                fixed typo.
+# 01/18/2004 rbrad Applying 4 Savannah patches:
+#	* 2466 - Remove redundant check (check was moved to check_passwd).
+#	* 2467 - Fix bug in USERDOTFILES when USERDOTFILES is empty.
+#	* 2468 - Cleanup and comment check_disabled().
+#	* 2469 - New check: Verify parent of $home is owned by administrative
+#                user.
+# 10/01/2003 jfs  For some reason this script stopped working in Linux
+#            massaged it to work again (changed while read in function
+#            to explicit parameter calling). Also added a check to
+#            avoid going through all the filesystem if $home is not defined.
+# 09/19/2003 jfs  Add root to Tiger_Admin_Accounts if already defined.
+#                 Also permit empty USERDOTFILES and fix dependancies.
+# 08/15/2003 jfs  ETCSHELLS is not indispensable to running this script.
+# 08/14/2003 jfs  Included ARSC changes including an update for Linux
+#                 in which no shell equals shell to address no
+#                 login programs.
+# 08/08/2003 jfs  Changed the creation of temporary file to avoid race
+#                 conditions. 
+# 08/08/2003 jfs  Added Ryan Bradetich's patch which:
+#     * Fixed the join statement to properly handle empty fields for
+#      check_user.
+#     * Fixed the home directory permission check.
+#     * Simplified the parent directory check.
+#     * Removed the "root" requirement for checking the shell initilizaion
+#       files.
+#     * Added .bashrc and .kshrc to the default list of .dotfiles.
+#     * Removed the following checks (Duplicates will be merged, the
+#     remaining checks will be relocated to a more appropriate module:
+#     check_passwd or check_passwdformat): acc001w, acc020w, acco14f,
+#     acc013w, acc010a, acc011w, acc012w, acc015w, add018w, acc016w,
+#     acc017w
+#
+# 05/01/2003 jfs  Fixed dependancy
+#
+# 07/26/2002 jfs Fixed to work in Solaris. Added WC as required command
+#
+# 07/25/2002 jfs Added a sanity check for password files
+#
+# 12/26/2001 jfs  Added Tiger_Accounts_Trust to define valid users which will
+#		not be so thoroughly checked. Useful for UN*X systems that
+#		ship with a default number of administrative (but disabled) users 
+#		for services/files (like Debian GNU/Linux)
+#
+# 04/28/93 dls  Added -L to 'ls' so we get the permissions off the file
+#               instead of the link.
+#
+# 04/27/93 dls  Rename from check_passwd to check_accounts
+#               Now checks *all* accounts, not just disabled ones
+#               and checks config files in home directories for
+#               writability.
+#-----------------------------------------------------------------------------
+# TODO:
+# - Some 'valid' shells such as nologin or noshell might be listed under
+#  /etc/shells but are really invalid. The script should maybe check these
+#  cases or provide a way to define $NOSHELL in order to exclude these.
+#-----------------------------------------------------------------------------
+#
+TigerInstallDir='.'
+
+#
+# Set default base directory.
+# Order or preference:
+#      -B option
+#      TIGERHOMEDIR environment variable
+#      TigerInstallDir installed location
+#
+basedir=${TIGERHOMEDIR:=$TigerInstallDir}
+
+for parm
+do
+   case $parm in
+   -B) basedir=$2; break;;
+   esac
+done
+
+#
+# Verify that a config file exists there, and if it does
+# source it.
+#
+[ ! -r $basedir/config ] && {
+  echo "--ERROR-- [init002e] No 'config' file in \`$basedir'."
+  exit 1
+}
+
+. $basedir/config
+#
+# Grab subroutines
+#
+. $BASEDIR/initdefs
+
+#
+# If run in test mode (-t) this will verify that all required
+# elements are set.
+#
+[ "$Tiger_TESTMODE" = 'Y' ] && {
+  haveallcmds AWK CAT CHECK_CRON FIND GEN_PASSWD_SETS GREP JOIN LS TR WC RM || exit 1
+  haveallfiles BASEDIR WORKDIR || exit 1
+  haveallvars HOSTNAME TESTEXEC || exit 1
+  
+  echo "--CONFIG-- [init003c] $0: Configuration ok..."
+  exit 0
+}
+#------------------------------------------------------------------------
+echo
+echo "# Performing check of user accounts..."
+
+haveallcmds AWK CAT CHECK_CRON FIND GEN_PASSWD_SETS GREP JOIN LS TR WC RM || exit 1
+haveallfiles BASEDIR WORKDIR || exit 1
+haveallvars HOSTNAME TESTEXEC || exit 1
+
+safe_temp "$WORKDIR/pass.list.$$" "$WORKDIR/home.hosts.$$"
+trap 'delete $WORKDIR/pass.list.$$ $WORKDIR/home.hosts.$$ ; exit 1' 1 2 3 15
+
+
+
+# Just in case: sanity check
+# If Not defined Tiger_Accounts_Trust then it's the lowest
+# possible to assure that -lt checks will be always false
+[ -z "$Tiger_Accounts_Trust" ] && Tiger_Accounts_Trust=-1
+# If not defined we disable this check
+[ -z "$Tiger_Dormant_Limit" ] && Tiger_Dormant_Limit=0
+if [ -z "$Tiger_Admin_Accounts" ] 
+then
+	Tiger_Admin_Accounts="root"
+else
+	Tiger_Admin_Accounts="$Tiger_Admin_Accounts|root"
+fi
+
+#
+# This function checks for potential access to an "disabled" account.
+#
+check_disabled()
+{
+  user=$1
+  home=$2
+  host=$3
+
+  # Check for an active cron file.
+  [ -n "$CHECK_CRON" -a "`$CHECK_CRON $user`" = 'YES' ] && 
+    message WARN acc005w "" "Login ID $user is disabled, but has a 'cron' file or cron entries."
+
+  # Return if home directory is not local or does not exists.
+  ([ ! -d "$home/" ] || [ "$host" != "$HOSTNAME" ]) && return
+
+  # Check the .forward file.
+  [ -s $home/.forward ] && $GREP -F '|' $home/.forward 2>&1 >/dev/null && 
+    message WARN acc003w "" "Login ID $user is disabled, but has a .forward file which executes commands."
+
+  # Check the .rhosts file.
+  [ -s $home/.rhosts ] && {
+    owner=`$LS -ld $home/.rhosts | $AWK '{print $3}'`
+    [ "$owner" = "$user" ] && {
+      message WARN acc004w "" "Login ID $user is disabled, but has a .rhosts file"
+    }
+  }
+}
+
+check_users()
+{
+  saveifs=$IFS
+  IFS=:
+  while read user home host shell uid hash
+  do
+     # Perform checks on "disabled" accounts (i.e. accounts without
+     # a valid password).
+     case $hash in
+       '*')
+         check_disabled "$user" "$home" "$host"
+         ;;
+     esac
+
+     # Verify the home directory is accessable.
+     [ ! -d "$home/" ] && {
+       [ -n "$uid" ] && [ $Tiger_Accounts_Trust -lt $uid ] && [ "$host" = "$HOSTNAME" ] && {
+         message WARN acc022w "" "Login ID $user home directory ($home) is not accessible."
+       }
+       continue
+     }
+
+     IFS=$saveifs
+
+     # Check the permissions on $home.
+     getpermit "$home/" | {
+       read _f owner group ur uw ux gr gw gx or ow ox suid sgid sticky
+
+       # Note: in Debian GNU/Linux systems, there might be one user in a single
+       # group so this check does
+       # TODO: make it check if there are more than a single user in the group
+       # and if it is = owner
+       # There is also usually a list of groups that we might want to 
+       # white list here (such as 'adm' or 'staff')
+
+       [ "$ow" = 1 ] || [ "$owner" != "$group" -a "$gw" = 1 ] && {
+         str="Login ID $user's home directory ($home) has"
+         case "$gw$ow" in
+           01) str="$str world write"
+               mode='o-w'
+               ;;
+           10) str="$str group \`$group' write"
+               mode='g-w'
+               ;;
+           11) mode='o=w'
+               [ "$owner" != "$group" ] && {
+                 str="$str group \`$group' and "
+                 mode='go-w'
+               }
+               str="$str world write"
+               ;;
+         esac
+         message WARN acc006w "" "${str} access."
+         changelog "WARN : chmod : $mode : $home/."
+       }
+     }
+
+     # Check permissions on the parent home directory
+     [ -n "$uid" ] && [ $uid -gt $Tiger_Accounts_Trust ] && {
+       getpermit ${home%/*}/ | {
+         read _f owner group ur uw ux gr gw gx or ow ox suid sgid sticky
+
+	 eval "case \"$owner\" in
+		$Tiger_Admin_Accounts)
+			;;
+		*)
+			message WARN acc023w \"\" \"Login ID $user's parent directory (${home%/*}) has non-administrative \\\`$owner' ownership.\"
+	 esac"
+
+         [ "${gw}${ow}" != '00' ] && {
+           str="Login ID $user's parent directory (${home%/*}/) has"
+           case "$gw$ow" in
+             01) str="$str world write"
+                 ;;
+             10) str="$str group \`$group' write"
+                 ;;
+             11) str="$str group \`$group' and world write"
+                 ;;
+           esac
+           message WARN acc023w "" "${str} access."
+         }
+       }
+     }
+
+     # Dormant account check.
+     [ "$home" != / -a -n "$home" -a "$Tiger_Dormant_Limit" != 0 ] && {
+       notadmin=`eval "case \"$user\" in $Tiger_Admin_Accounts) ;; *) echo $user;; esac"`
+       [ -n "$notadmin" ] &&  \
+       [ `$FIND "$home/" -mtime -$Tiger_Dormant_Limit 2>/dev/null | $WC -l` -eq 0 ] && 
+           message WARN acc021w "" "Login ID $user appears to be a dormant account."
+     }
+
+     # Non-zero sized .hushlogin
+     [ -s "$home/.hushlogin" ] &&
+       message ALERT acc007a '' "Login ID $user has a non-zero length .hushlogin"
+
+     # Check shell initialization files.
+     # TODO: Bob Hall suggest disabling the check for standard UNIX accounts. 
+     # In HP-UX these are: daemon|bin|sys|adm|lp|nobody|hpdb.
+     # However, this might leave some  "holes" open 
+     # (just rename the account so that it will not be check for).
+     # A secure approach has to be determined for this to work properly.
+
+     [ -z "$shell" ] && shell=/bin/sh
+     [ $TESTEXEC $shell ] && [ -n "$uid" ] && [ $uid -gt $Tiger_Accounts_Trust ] && {
+       eval "
+         case \"$shell\" in
+           $shcase)
+             [ ! -r "${home}/.${shell##*/}rc" ] && {
+               message WARN acc019w \"\" \"Login ID $user may be missing a shell initialization file ${home}/.${shell##*/}rc.\"
+             }
+             ;;
+           *)
+             # Invalid shells are handled in the check_password module.
+             ;;
+         esac"
+     }
+
+     # Check permissions on user dotfiles.
+     dotfiles=${USERDOTFILES:-".cshrc .bashrc .kshrc .profile .login .exrc .forward"}
+     for file in $dotfiles
+     do
+       [ -f "$home/$file" ] && {
+         getpermit "$home/$file" | {
+           read _f owner group ur uw ux gr gw gx or ow ox suid sgid stk
+
+           [ "${gw}${ow}" != '00' ] && {
+             str="Login ID $user's $file config file has"
+             case "$gw$ow" in
+               01) str="$str world write"
+                   mode='o-w'
+                   ;;
+               10) str="$str group \`$group' write"
+                   mode='g-w'
+                   ;;
+               11) str="$str group \`$group' and world write"
+                   mode='go-w'
+                   ;;
+             esac
+
+             message WARN acc008w '' "${str} access."
+             changelog "WARN : chmod : $mode : $home/$file"
+           }
+         }
+       }
+     done
+     IFS=:
+  done
+  IFS=$saveifs
+}
+
+# Define shcase to be a list of valid shells, so we can check for
+# shell initilization files.
+shcase='/bin/sh|/bin/csh|/bin/bash|/bin/tcsh|/bin/ksh'
+[ -n "$ETCSHELLS" -a -s "$ETCSHELLS" ] && {
+  shells=`$GREP -v '^#' $ETCSHELLS`
+  shcase=`echo $shells | $TR ' ' '|'`
+}
+
+if [ -n "$Tiger_PasswdFiles" ]; then
+  [ -f $Tiger_PasswdFiles ] && $CAT "$Tiger_PasswdFiles" > $WORKDIR/pass.list.$$
+else
+  $GEN_PASSWD_SETS $WORKDIR/pass.list.$$
+fi
+
+while read passwd_set
+do
+  source=`$CAT $passwd_set.src`
+  echo "# Checking accounts from $source."
+
+  $AWK -F: '{print $1, $6}' $passwd_set |
+  $BASEDIR/util/${GETFSHOST:=getfs-std} |
+  $TR ' ' : > $WORKDIR/home.hosts.$$
+
+  $JOIN -t: -o 1.1 1.6 2.3 1.7 1.3 1.2 $passwd_set $WORKDIR/home.hosts.$$ |
+  check_users
+
+  [ ! -n "$Tiger_PasswdFiles" ] && delete $passwd_set $passwd_set.src
+  delete $WORKDIR/home.hosts.$$
+done < $WORKDIR/pass.list.$$
+
+delete "$WORKDIR/pass.list.$$" "$WORKDIR/home.hosts.$$"
+exit 0

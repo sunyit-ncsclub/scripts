@@ -1,0 +1,175 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# check_devices
+# 	checks permissions on tape devices
+# 10-30-2001
+# Paul Telford <paul_telford@hp.com>
+#
+# 09/19/2003 jfs  Fixed error with patch submitted by Ryan Bradetich
+# 08/12/2003 jfs  Fixed error (dirs->dir) and added a warning for 
+#                 non-special files.
+# 08/11/2003 jfs  Fixed dependancies.
+# 04/15/2003 jfs  Fixed stupid error which made terminals appear 
+#		  (/dev/ -> /dev)
+# 08/12/2002 jfs  Added /devices/pseudo/pts to terminal lists.
+# 08/09/2002 jfs  Fixed to work in Solaris (added pseudo devices and changed
+#                 -L to -h)
+# 07/25/2002 jfs  Changed TigerInstallDir to .
+# 03/31/2005 jfs  Added EXPECTEDIRS dn EXPECTEDDEVICES in /dev (Os specific)
+#                 and added Solaris (9) devices
+# 05/20/2006 jfs  Handle the special case of having " in filenames by quoting
+#                 the character (Debian bug #355096)
+# 06/21/2007 jfs  Extend the list of EXPECTEDDIRS for Linux to cover udev
+#
+#-----------------------------------------------------------------------------
+#
+TigerInstallDir='.'
+
+#
+# Set default base directory.
+# Order or preference:
+#      -B option
+#      TIGERHOMEDIR environment variable
+#      TigerInstallDir installed location
+#
+basedir=${TIGERHOMEDIR:=$TigerInstallDir}
+
+for parm
+do
+   case $parm in
+   -B) basedir=$2; break;;
+   esac
+done
+#
+# Verify that a config file exists there, and if it does
+# source it.
+#
+[ ! -r $basedir/config ] && {
+  echo "--ERROR-- [init002e] No 'config' file in \`$basedir'."
+  exit 1
+}
+. $basedir/config
+
+. $BASEDIR/initdefs
+#
+# If run in test mode (-t) this will verify that all required
+# elements are set.
+#
+[ "$Tiger_TESTMODE" = 'Y' ] && {
+  haveallcmds LS AWK SED || exit 1
+  haveallfiles BASEDIR WORKDIR || exit 1
+  
+  echo "--CONFIG-- [init003c] $0: Configuration ok..."
+  exit 0
+}
+#------------------------------------------------------------------------
+
+haveallcmds LS AWK SED || exit 1
+haveallfiles BASEDIR WORKDIR || exit 1
+
+check_dev_file()
+{
+	device=$1
+	getpermit $device |
+    	while read filename rowner rgroup rur ruw rux rgr rgw rgx ror row rox rsuid rsgid rstk
+    	do
+		if [ $ror -eq 1 -o $row -eq 1 -o $rox -eq 1 ]
+		then
+		case $device in
+		/dev/st[0-9])
+			message FAIL dev001f "" "$device has world permissions"
+		;;
+		*)
+			message FAIL dev002f "" "$device has world permissions"
+		;;
+		esac
+		fi
+	done
+
+}
+
+echo
+echo "# Checking device permissions..."
+
+EXPECTEDIRS="/dev/none"
+if [ "$OS" = "Linux" ] ; then
+	EXPECTEDFILES="/dev/core|/dev/stdout"
+fi
+EXPECTEDIRS="/dev/none"
+if [ "$OS" = "SunOS" ] ; then
+	EXPECTEDDIRS="/dev/cfg|/dev/cua|/dev/dsk|/dev/es|/dev/fd|/dev/md|/dev/printers|/dev/pts|/dev/rdsk|/dev/sad|/dev/swap|/dev/term"
+fi
+if [ "$OS" = "Linux" ] ; then
+	EXPECTEDDIRS="/dev/mapper|/dev/net|/dev/shm|/dev/cciss|/dev/fd|/dev/ida|/dev/input|/dev/mapper|/dev/net|/dev/pts|/dev/rd|/dev/shm|/dev/usb|/dev/ataraid|/dev/bus|/dev/cdroms|/dev/discs|/dev/disk|/dev/dri|/dev/fb|/dev/floppy|/dev/i2c|/dev/loop|/dev/md|/dev/misc|/dev/ptal-printd|/dev/scsi|/dev/snd|/dev/sound|/dev/tts|/dev/vc|/dev/vcc"
+fi
+
+dirs="/dev"
+# For Solaris but maintain compatibility with others
+# (in Solaris /dev/ are symlinks to devices in /devices/pseudo)
+[ -d /devices ] && dirs="$dirs /device"
+[ -d /devices/pseudo ] && dirs="$dirs /devices/pseudo"
+for dir in $dirs
+do
+for file in $dir/[a-z0-9]*
+do
+
+	[ -f "$file" ] &&  {
+	file=`echo $file | $SED -e 's/"/\\\"/g'`
+    	eval "case \"$file\" in
+		$EXPECTEDFILES)
+		# Expected directories
+		;;
+		*)
+       		      message WARN dev003w \"\" \"File $file is a regular file in a device directory.\"
+		;;
+	esac"
+	}
+
+	[ -d "$file" ] && {
+	eval "case \"$file\" in
+		$EXPECTEDDIRS)
+		# Expected directories
+		;;
+		*)
+		message WARN dev003w \"\" \"The directory $file resides in a device directory.\"
+		;;
+	esac"
+	}
+
+    	case $file in
+	/dev/pty*|/dev/tty*|/devices/pseudo/pts*)
+	# Do not check for virtual terminals
+	;;
+	/dev/urandom|/dev/random|/dev/zero|/dev/full|/dev/null)
+	# Same for some special devices
+	;;
+	/devices/pseudo/mm@0:null|/devices/pseudo/mm@0:zero|/devices/pseudo/random@0:random|/devices/pseudo/random@0:urandom)
+	# And for some devices in Solaris
+	;;
+	*)
+	# Do not check directories or symbolic links
+		if [ ! -d "$file"  -a  ! -h "$file" ] 
+		then
+		   check_dev_file $file
+		fi
+	;;
+	esac
+done
+done
+
+exit 0

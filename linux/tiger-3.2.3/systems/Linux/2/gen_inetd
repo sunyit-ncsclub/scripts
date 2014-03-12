@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# Linux/2/gen_inetd - 06/14/93
+# 
+# Generates sets for Linux systems, based on the SunOS version.
+#
+# 01/15/2004 - jfs - Use XINETDCONF and INETDCONF instead
+# 01/13/2004 - jfs - Do not use inetd.conf if it does not exist
+#
+#-----------------------------------------------------------------------------
+#
+# TODO: 
+# - This script has to generate also proper sets for xinetd, notice
+# that some checks (check_tcpd, check_rootkit) depend on this and they
+# use the inetd format:
+# <service_name> <sock_type> <proto> <flags> <user> <server_path> <args>
+# This scripts needs to read in all the inetd configuration files 
+# (usually under /etc/xinetd.d/) and generate a new file, one line
+# per service.
+#
+#-----------------------------------------------------------------------------
+
+[ -n "$INETDCONF" ] && [ -f $INETDCONF ] && {
+$GREP -v '^#' $INETDCONF |
+$SORT > $WORKDIR/etc_inetd.$$
+echo "$INETDCONF" > $WORKDIR/etc_inetd.$$.src
+echo $WORKDIR/etc_inetd.$$
+}
+
+#[ -n "$XINETDCONF" ] && [ -f $XINETDCONF ] && {
+#}

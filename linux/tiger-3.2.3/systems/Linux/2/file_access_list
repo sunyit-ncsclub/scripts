@@ -1,0 +1,96 @@
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# file_access_list - DATE
+#
+#-----------------------------------------------------------------------------
+file               owner     group  s  g  r  w  x  r  w  x  r  w  x   LVL  OwnID  GrpID  PermID
+/                  root      root   0  0  1  1  1  1  0  1  1  0  1   W    018    018    018
+/bin               root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/bin/*             root      root   .  0  1  1  1  1  0  1  1  0  1.  001  002    003
+/bin/bash          root      root   0  0  1  1  1  1  0  1  1  0  1   W    001    002    003
+/bin/login         root      root   0  0  1  1  1  1  0  1  1  0  1   F    001    002    003
+/bin/sh            root      root   0  0  1  1  1  1  0  1  1  0  1   W    001    002    003
+/bin/su            root      root   0  0  1  1  1  1  0  1  1  0  1   F    001    002    003
+/bin               root      root   0  0  1  1  1  1  0  1  1  0  1   W    001    002    003
+/boot              root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/dev               root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/etc               root      root   0  0  1  1  1  1  0  1  1  0  1   W    019    019    019
+/etc/*             root      .      0  .  1  .  .  .  .  .  .  0  ..  001  002    003
+/etc/aliases       root      root   0  0  1  1  0  1  0  0  1  0  0   F    007    007    007
+/etc/aliases       root      root   0  0  1  1  0  1  0  0  1  0  0   F    007    007    007
+/etc/exports       root      root   0  0  1  1  0  1  0  0  1  0  0   W    008    008    008
+/etc/fstab         root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/group         root      root   0  0  1  1  0  1  0  0  1  0  0   .    001    002    003
+/etc/group         root      root   0  0  1  1  0  1  0  0  1  0  0   F    009    009    009
+/etc/hosts         root      root   0  0  1  1  0  1  0  0  1  0  0   F    001    002    003
+/etc/hosts.allow   root      root   0  0  1  1  0  1  0  0  1  0  0   W    010    010    010
+/etc/hosts.deny    root      root   0  0  1  1  0  1  0  0  1  0  0   W    010    010    010
+/etc/inetd.conf    root      root   0  0  1  1  0  1  0  0  1  0  0   W    012    012    012
+/etc/init.d        root      root   0  0  1  1  1  1  0  1  1  0  1   F    015    015    015
+/etc/init.d/*      root      root   0  0  1  1  .  1  0  .  1  0  .F  015  015    015
+/etc/inittab       root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/ld.so.cache   root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/modules       root      root   0  0  1  1  0  1  0  0  1  0  0   .    001    002    003
+/etc/motd          root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/mtab          root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/netgroup      root      root   0  0  1  1  0  1  0  0  1  0  0   F    013    013    013
+/etc/pam.d/sudo    root      root   0  0  1  1  0  1  0  0  1  0  0   W    017    017    017
+/etc/passwd        root      root   0  0  1  1  0  1  0  0  1  0  0   A    014    014    014
+/etc/printcap      root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/profile       root      root   0  0  1  1  0  1  0  0  1  0  0   .    001    002    003
+/etc/rc.boot       root      root   0  0  1  1  1  1  0  1  1  0  1   F    015    015    015
+/etc/rc?.d         root      root   0  0  1  1  1  1  0  1  1  0  1F  015  015    015
+/etc/rc?.d/*       root      root   0  0  1  1  .  1  0  .  1  0  .F  015  015    015
+/etc/resolv.conf   root      root   0  0  1  1  0  1  0  0  1  0  0   W    016    016    016
+/etc/rpc           root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/security/*    root      root   0  0  1  1  0  1  0  0  1  0  0A  005  005    005
+/etc/security      root      root   0  0  1  1  1  1  0  1  1  0  1   A    005    005    005
+/etc/services      root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/etc/sudoers       root      root   0  0  1  0  0  1  0  0  0  0  0   W    017    017    017
+/etc/syslog.conf   root      root   0  0  1  1  0  1  0  0  1  0  0   W    001    002    003
+/lib               root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/root/.bashrc      root      root   0  0  1  1  0  1  0  0  1  0  0   W    006    006    006
+/root/.profile     root      root   0  0  1  1  0  1  0  0  1  0  0   W    006    006    006
+/root/.rhosts      jfernand  root   0  0  1  1  0  1  0  0  1  0  0   W    006    006    006
+/sbin              root      root   0  0  1  1  1  1  0  1  1  0  1   W    001    002    003
+/usr               root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/*             root      .      0  .  1  1  1  1  .  1  1  0  1.  001  002    003
+/usr               root      root   0  0  1  1  1  1  0  1  1  0  1   002  003
+/usr/bin           root      root   0  0  1  1  1  1  0  1  1  0  1   A    001    002    003
+/usr/bin/*         root      .      .  .  1  1  1  1  0  1  1  0  1.  001  002    003
+/usr/bin/at        root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/atq       root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/atrm      root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/passwd    root      root   0  0  1  1  1  1  0  1  1  0  1   F    001    002    003
+/usr/bin/uudecode  root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/uuencode  root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/wall      root      tty    1  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/bin/write     root      tty    1  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/games         root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/lib           root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr/share         root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/usr               root      root   0  0  1  1  1  1  0  1  1  0  1   W    001    002    003
+/var               root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/var/*             root      .      0  .  1  1  1  1  .  1  1  .  1.  001  002    003
+/var/log/*         .         .      0  .  1  1  .  1  .  .  .  0  ..  001  002    003
+/var/log/wtmp      root      utmp   0  0  1  1  0  1  1  0  1  0  0   .    001    002    003
+/var/run/utmp      root      utmp   0  0  1  1  0  1  1  0  1  0  0   W    017    017    017
+/var/spool         root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/var/tmp           root      root   0  1  1  1  1  1  1  1  1  1  1   .    001    002    003
+/var/yp            root      root   0  0  1  1  1  1  0  1  1  0  1   .    001    002    003
+/var/yp/*          root      root   0  0  1  1  .  1  0  .  1  0  ..  001  002    003
+/vmlinuz           root      root   0  0  1  1  0  1  0  0  1  0  0   .    001    002    003

@@ -1,0 +1,256 @@
+#!/bin/sh
+#
+#     tiger - A UN*X security checking system
+#     Copyright (C) 1993 Douglas Lee Schales, David K. Hess, David R. Safford
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2, or (at your option)
+#    any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#     Please see the file `COPYING' for the complete copyright notice.
+#
+# Linux/1/gen_mounts - 04/20/99
+# Linux/2/gen_mounts - 04/20/99
+# Updated by Advanced Research Corporation (R)
+# Linux/2/gen_mounts - 11/19/2003 - Added ext3 and reiserfs as valid 
+#     local filesystems (patch from Ryan Bradetich), also added xfs and jfs.
+# Linux/2/gen_mounts - 03/21/2005 - Warn if the filesystem is not recognised
+#     this is a fix for Tiger bug #7093 
+# Linux/2/gen_mounts - 04/14/2005 - Add more filesystems and recognise the 
+#     fact that users can define fallback filesystems (Debian Bug #304555 and
+#     #302646)
+# Linux/2/gen_mounts - 04/18/2005 - Fix to previous patch which introduced typos
+# Linux/2/gen_mounts - 05/14/2005 - Added auto (Debian bug #305670), udev when
+#     using on /dev (Debian bug #307802), capifs (Debian bug #307887), nfsd
+#     (Debian bug #308585)
+# Linux/2/gen_mounts - 07/22/2005 - Changed extraction from mount command
+#     so it can cope with whitespaces in mount locations, added sanity check
+#     and fix a bug that mangled $fs (Debian bug #315435)
+# Linux/2/gen_mounts - 08/29/2005 - Added vzfs (VPS filesystem) to local fs,
+#     Savannah bug #14299
+# Linux/2/gen_mounts - 05/20/2006 - Added cifs to non local FS (Debian bug #329813)
+# Linux/2/gen_mounts - 11/16/2006 - Added selinuxfs to local FS (Debian bug #397832)
+# Linux/2/gen_mounts - 06/22/2007 - Added fusectl to local FS (Debian bug #409386)
+# Linux/2/gen_mounts - 06/26/2007 - Added Vmware's vmblock as non-local FS
+# Linux/2/gen_mounts - 09/08/2008 - Added reiser4 as a local FS (Debian bug #498203)
+#                                 - Added securityfs as a non-local FS (Ubuntu bug #155211)
+#                                 - Added fuse.gvfs-fuse-daemon as a local FS (Ubuntu bug #155211)
+#                                 - Added fuseblk as a local FS
+#                                 - Added fuse.truecrypt as a local FS
+#                                 - Added fuse.encfs as a local FS (Debian bug #483727)
+#                                 - Added debugfs as a non-local FS, to skip it from checks (Debian bug #469685)
+#                                 - Added afs as a non-local FS (Savannah bug #14028)
+#                                 - Added configfs, gfs and gfs2 as a non-local FS (Debian bug #490344)
+#                                 - Added inotifyfs, hugetlb and subfs as a non-local FS
+#                                 - Make futexfs a non-local FS (Debian bug #490822)
+#                                 - Added bind as a non-local FS (Debian bug #451879)
+#                                 - Skip udev fs even if its in a tmpfs FS, prevent analysis
+#                                   of unexistant symlinks (See Debian bug 434333)
+# Linux/2/gen_mounts - 11/27/2008 - Added ecryptfs, used by ecryptfs-utils (See Debian bug 506512)
+#                                 - Fix bashism (Debian bug #505939)
+#-----------------------------------------------------------------------------
+#
+
+dirname()
+{
+  _path="$1"
+
+  saveifs=$IFS
+  IFS=/
+  set X $_path
+  IFS=$saveifs
+
+  shift
+
+  if [ $# -eq 1 ]; then
+    _dirname='/'
+  else
+    _dirname=
+    while [ $# -ne 1 ]
+    do
+      _dirname="$_dirname/$1"
+      shift
+    done
+  fi
+  
+  echo "$_dirname"
+}
+  
+LOCAL_ONLY=$1
+CHKRO=$2
+
+ronly()
+{
+  RO=1
+  case "$1" in
+    *[!a-zA-Z]ro[!a-zA-Z]*) RO=0
+      ;;
+  esac
+  return $RO
+}
+
+localfs()
+{
+# Determine which filesystem is local, for filesystems valid for Linux
+# read the mount(5), fstab(5) or Documentation/filesystems in the Linux
+# kernel
+  LOCAL=2
+  # Valid local filesystems
+  [ "$1" = "ext" ] && LOCAL=0
+  [ "$1" = "ext2" ] && LOCAL=0
+  [ "$1" = "ext3" ] && LOCAL=0
+  [ "$1" = "auto" ] && LOCAL=0
+  [ "$1" = "vzfs" ] && LOCAL=0        # VPS virtual partition
+  [ "$1" = "reiserfs" ] && LOCAL=0
+  [ "$1" = "reiser4" ] && LOCAL=0
+  [ "$1" = "xfs" ] && LOCAL=0
+  [ "$1" = "jfs" ] && LOCAL=0
+  [ "$1" = "minix" ] && LOCAL=0
+  [ "$1" = "xiafs" ] && LOCAL=0
+  [ "$1" = "sysv" ] && LOCAL=0
+  [ "$1" = "ufs" ] && LOCAL=0
+  [ "$1" = "coherent" ] && LOCAL=0
+  [ "$1" = "xenix" ] && LOCAL=0
+  [ "$1" = "hpfs" ] && LOCAL=0
+  [ "$1" = "rootfs" ] && LOCAL=0                # Provides an empty root directory for the bootstrap phase
+  [ "$1" = "shm" ] && LOCAL=0                   # IPC-shared memory regions
+  [ "$1" = "tmpfs" ] && LOCAL=0                 # Temporary files (kept in RAM unless swapped)
+  # Exception: udev uses a tmpfs and it has many symlinks that point nowhere, it should be skipped
+  [ "$1" = "tmpfs" ] && [ "$2" = "udev" ] && LOCAL=1 
+  [ "$1" = "auto" ] && LOCAL=0
+  [ "$1" = "selinuxfs" ] && LOCAL=0
+  [ "$1" = "fusectl" ] && LOCAL=0
+  [ "$1" = "fuseblk" ] && LOCAL=0               # Used in Ubuntu 'hardy'
+  [ "$1" = "fuse.truecrypt" ] && LOCAL=0        # Encrypted filesystem, used in Ubuntu 'hardy'
+  [ "$1" = "fuse.encfs" ] && LOCAL=0            # Encrypted filesystem
+  [ "$1" = "fuse.gvfs-fuse-daemon" ] && LOCAL=0 # Used in Ubuntu 'hardy'
+  [ "$1" = "ecryptfs" ] && LOCAL=0              # Encrypted filesystem used by ecryptfs-utils
+  # Filesystems of other OS
+  [ "$1" = "msdos" ] && LOCAL=1
+  [ "$1" = "umsdos" ] && LOCAL=1
+  [ "$1" = "vfat" ] && LOCAL=1
+  [ "$1" = "ntfs" ] && LOCAL=1
+  [ "$1" = "hfs" ] && LOCAL=1
+  [ "$1" = "qnx4" ] && LOCAL=1
+  [ "$1" = "udf" ] && LOCAL=1
+  # Remotely mounted fs
+  [ "$1" = "nfs" ] && LOCAL=1
+  [ "$1" = "nfs4" ] && LOCAL=1
+  [ "$1" = "nfsd" ] && LOCAL=1
+  [ "$1" = "ncpfs" ] && LOCAL=1
+  [ "$1" = "smbfs" ] && LOCAL=1
+  [ "$1" = "cifs" ] && LOCAL=1
+  [ "$1" = "coda" ] && LOCAL=1
+  [ "$1" = "AFS" ] && LOCAL=1       # Andrew Filesystem
+  [ "$1" = "afs" ] && LOCAL=1       # Andrew Filesystem
+  [ "$1" = "rpc_pipefs" ] && LOCAL=1
+  [ "$1" = "gfs" ] && LOCAL=1       # Red Hat's Global Filesystem
+                                    # http://sources.redhat.com/cluster/wiki/
+  [ "$1" = "gfs2" ] && LOCAL=1      # Red Hat's Global Filesystem
+  # Note: gfs is considered non-local even though remoutely mounted in a SAN as this filesystem could
+  # be used exclusively, if your system uses gfs or gfs2 and you want to scan the filesystem
+  # set it at Tiger_FSScan_Local
+  [ "$1" = "proc" ] && LOCAL=1                  # General access point to kernel data structures
+  [ "$1" = "bind" ] && LOCAL=1                  # Used to remount directories, define as virtual
+                                                # as otherwise files would be checked twice
+  [ "$1" = "devpts" ] && LOCAL=1                # Pseudoterminal support (Open Group's Unix98 standard)
+  [ "$1" = "usbfs" ] && LOCAL=1                 # USB devices
+  [ "$1" = "usbdevfs" ] && LOCAL=1
+  [ "$1" = "devfs" ] && LOCAL=1
+  [ "$1" = "sysfs" ] && LOCAL=1                 # General access point to system data
+  [ "$1" = "securityfs" ] && LOCAL=1            # Used by Ubuntu, see http://lwn.net/Articles/153366/ 
+  [ "$1" = "none" ] && LOCAL=1
+  [ "$1" = "autofs" ] && LOCAL=1
+  [ "$1" = "binfmt_misc" ] && LOCAL=1           # Miscellaneous executable formats
+  [ "$1" = "cramfs" ] && LOCAL=1
+  [ "$1" = "ramfs" ] && LOCAL=1
+  [ "$1" = "romfs" ] && LOCAL=1
+  [ "$1" = "mqueue" ] && LOCAL=1                # POSIX message queues
+  [ "$1" = "sockfs" ] && LOCAL=1                # Sockets
+  [ "$1" = "bdev" ] && LOCAL=1                  # Block devices
+  [ "$1" = "pipefs" ] && LOCAL=1
+  [ "$1" = "eventpollfs" ] && LOCAL=1           # Efficient event polling mechanism
+  [ "$1" = "inotifyfs" ] && LOCAL=1 
+  [ "$1" = "hugetlbf" ] && LOCAL=1 
+  [ "$1" = "subfs" ] && LOCAL=1 
+  [ "$1" = "futexfs" ] && LOCAL=1               # futex (Fast Userspace Locking) mechanism
+  [ "$1" = "vmblock" ] && LOCAL=1               # Vmware filesystem
+  [ "$1" = "debugfs" ] && LOCAL=1               # Debugging filesystem see 
+                                                # http://lwn.net/Articles/115405/
+  [ "$1" = "configfs" ] && LOCAL=1
+  # Other filesystems we don't support
+  [ "$1" = "adfs" ] && LOCAL=1
+  [ "$1" = "affs" ] && LOCAL=1
+  [ "$1" = "afs" ] && LOCAL=1
+  [ "$1" = "efs" ] && LOCAL=1
+  [ "$1" = "iso9660" ] && LOCAL=1
+  [ "$1" = "capifs" ] && LOCAL=1
+  # Some special filesystems
+  [ "$1" = "unknown" ] && [ "$2" = "/dev" ] && LOCAL=1
+
+  # Handle the Tiger_FSScan_Local and Tiger_FSScan_Nonlocal variables, if defined
+  if [ ! -z "$Tiger_FSScan_Local" ] ; then
+    # List of known filesystems the admin considers to be local to the system
+    if echo $1 | $EGREP -q $Tiger_FSScan_Local; then
+        LOCAL=0
+    fi
+  fi
+  if [ ! -z "$Tiger_FSScan_NonLocal" ] ; then
+    # List of known filesystems the admin considers to be not local to the system
+    if echo $1 | $EGREP -q $Tiger_FSScan_NonLocal; then
+        LOCAL=1
+    fi
+  fi
+
+  # The rest we warn about
+  if [ "$LOCAL" -eq 2 ] ; then
+    if [ -z "$Tiger_FSScan_WarnUnknown" ] || [ "$Tiger_FSScan_WarnUnknown" = "Y" ] ; then
+        echo "--CONFIG-- [con010c] Filesystem '$1' used by '$2' is not recognised as a valid filesystem" >&2
+    fi
+    LOCAL=1
+  fi
+  return $LOCAL
+}
+
+# If run directly do this, just in case:
+[ -z "$GETFS" ] && GETFS=`which mount`
+[ -z "$SED" ] && SED=`which sed`
+[ -z "$BASENAME" ] && BASENAME=`which basename`
+[ -z "$EGREP" ] && EGREP=`which egrep`
+
+$GETFS  |
+while read line
+do
+# $fs on $mtpoint type $fstype ($opts)
+  PRINT=1
+  fs=`echo $line | sed -e 's/ on.*$//'`
+  mtpoint=`echo $line | sed -e 's/^.* on //' | sed -e 's/ type.*$//'`
+  # Indent spaces in case we found any in the mount point
+  mtpoint=`echo $mtpoint | sed -e 's/\([[:space:]]\)/\\\\\1/g'`
+  fstype=`echo $line | sed -e 's/.* type \(.*\) (.*/\1/'`
+  # Strip fallback filesystems
+  fstype=`echo $fstype | $SED -e 's/,.*$//'`
+  opts=`echo $line | sed -e 's/.* (\(.*\))$/\1/'`
+  # Sanity check, do not proceed if the values are empty or if
+  # we have not been able to parse the information properly
+  [ -z "$fs" ] || [ -z "$mtpoint" ] || [ -z "$fstype" ] || [ -z "$opts" ] || \
+  [ "$fs" = "$line" ] || [ "$mtpoint" = "$line" ] || \
+  [ "$fstype" = "$line" ] || [ "$opts" = "$line" ] && \
+  continue
+  # TODO: warn in continuing?
+  [ "$CHKRO" = "rw" ] && { ronly "$opts" && PRINT=0; }
+  [ "$LOCAL_ONLY" = "local" ] && { localfs "$fstype" "$fs" || PRINT=0; }
+  [ "$PRINT" = "1" ] && {
+    dir=`dirname $fs`
+    file=`$BASENAME $fs`
+    rfs="$dir/r$file"
+    echo "$mtpoint $fstype $fs"
+  }
+done
+
